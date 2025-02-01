@@ -33,6 +33,36 @@ Clarinet.test({
 });
 
 Clarinet.test({
+    name: "Test subdomain registration",
+    async fn(chain: Chain, accounts: Map<string, Account>) {
+        const wallet1 = accounts.get('wallet_1')!;
+        
+        let block = chain.mineBlock([
+            Tx.contractCall('domain-registry', 'register-domain', [
+                types.ascii("test.btc")
+            ], wallet1.address),
+            Tx.contractCall('domain-registry', 'register-subdomain', [
+                types.ascii("test.btc"),
+                types.ascii("sub")
+            ], wallet1.address)
+        ]);
+        
+        block.receipts[0].result.expectOk();
+        block.receipts[1].result.expectOk();
+        
+        // Verify subdomain ownership
+        let query = chain.callReadOnlyFn(
+            'domain-registry',
+            'get-domain-owner',
+            [types.ascii("sub.test.btc")],
+            wallet1.address
+        );
+        
+        assertEquals(query.result.expectSome(), wallet1.address);
+    }
+});
+
+Clarinet.test({
     name: "Test duplicate registration prevention",
     async fn(chain: Chain, accounts: Map<string, Account>) {
         const wallet1 = accounts.get('wallet_1')!;
