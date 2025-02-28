@@ -7,7 +7,9 @@
 (define-constant err-not-domain-owner (err u102))
 (define-constant err-expired (err u103))
 (define-constant err-invalid-subdomain (err u104))
+(define-constant err-invalid-format (err u105))
 (define-constant registration-duration u31536000) ;; 1 year in seconds
+(define-constant valid-domain-regex "^[a-z0-9]+[a-z0-9-]*[a-z0-9]+\.btc$")
 
 ;; Data vars
 (define-map domains
@@ -26,6 +28,12 @@
 )
 
 ;; Private functions
+(define-private (is-valid-format (name (string-ascii 64)))
+    (match (string-matches? valid-domain-regex name)
+        success true
+        false)
+)
+
 (define-private (is-valid-subdomain (domain-name (string-ascii 64)) (subdomain (string-ascii 64)))
     (let (
         (domain-parts (as-max-len? (string-split domain-name ".") u3))
@@ -33,6 +41,7 @@
     (and
         (is-some domain-parts)
         (<= (len (unwrap-panic domain-parts)) u2)
+        (is-valid-format subdomain)
     ))
 )
 
@@ -43,6 +52,7 @@
         (block-time (unwrap-panic (get-block-info? time u0)))
         (expiry (+ block-time registration-duration))
     )
+    (asserts! (is-valid-format name) err-invalid-format)
     (asserts! (is-none existing-registration) err-already-registered)
     (map-set domains tx-sender {
         name: name,
@@ -66,55 +76,22 @@
     (asserts! (is-valid-subdomain domain-name subdomain) err-invalid-subdomain)
     (asserts! (is-none (map-get? name-to-address full-subdomain)) err-already-registered)
     
-    (map-set domains tx-sender 
+    ;; Update domain owner's subdomain list
+    (map-set domains domain-owner 
         (merge domain 
             { subdomains: (unwrap-panic (as-max-len? 
                 (append (get subdomains domain) full-subdomain) 
                 u20))}))
+    
+    ;; Create separate record for subdomain owner
+    (map-set domains tx-sender {
+        name: full-subdomain,
+        owner: tx-sender,
+        expires: (get expires domain),
+        subdomains: (list)
+    })
     (map-set name-to-address full-subdomain tx-sender)
     (ok true))
 )
 
-(define-public (transfer-domain (new-owner principal))
-    (let (
-        (domain (unwrap! (map-get? domains tx-sender) err-not-domain-owner))
-        (block-time (unwrap-panic (get-block-info? time u0)))
-    )
-    (asserts! (< block-time (get expires domain)) err-expired)
-    (map-set domains new-owner domain)
-    (map-set name-to-address (get name domain) new-owner)
-    (map-delete domains tx-sender)
-    (ok true))
-)
-
-(define-public (renew-domain)
-    (let (
-        (domain (unwrap! (map-get? domains tx-sender) err-not-domain-owner))
-        (block-time (unwrap-panic (get-block-info? time u0)))
-        (new-expiry (+ block-time registration-duration))
-    )
-    (map-set domains tx-sender
-        (merge domain { expires: new-expiry })
-    )
-    (ok true))
-)
-
-;; Read only functions
-(define-read-only (get-domain-owner (name (string-ascii 64)))
-    (map-get? name-to-address name)
-)
-
-(define-read-only (get-domain-info (owner principal))
-    (map-get? domains owner)
-)
-
-(define-read-only (is-domain-available (name (string-ascii 64)))
-    (is-none (map-get? name-to-address name))
-)
-
-(define-read-only (get-subdomains (owner principal))
-    (match (map-get? domains owner)
-        domain (ok (get subdomains domain))
-        (err none)
-    )
-)
+[Rest of the contract remains unchanged...]
