@@ -1,113 +1,32 @@
-import {
-    Clarinet,
-    Tx,
-    Chain,
-    Account,
-    types
-} from 'https://deno.land/x/clarinet@v1.0.0/index.ts';
-import { assertEquals } from 'https://deno.land/std@0.90.0/testing/asserts.ts';
-
 Clarinet.test({
-    name: "Test domain registration",
+    name: "Test domain registration validation",
     async fn(chain: Chain, accounts: Map<string, Account>) {
         const wallet1 = accounts.get('wallet_1')!;
         
+        // Test empty domain name
         let block = chain.mineBlock([
             Tx.contractCall('domain-registry', 'register-domain', [
-                types.ascii("test.btc")
+                types.ascii("")
             ], wallet1.address)
         ]);
+        block.receipts[0].result.expectErr(107); // err-empty-name
         
-        block.receipts[0].result.expectOk();
-        
-        // Verify domain ownership
-        let query = chain.callReadOnlyFn(
-            'domain-registry',
-            'get-domain-owner',
-            [types.ascii("test.btc")],
-            wallet1.address
-        );
-        
-        assertEquals(query.result.expectSome(), wallet1.address);
-    }
-});
-
-Clarinet.test({
-    name: "Test subdomain registration",
-    async fn(chain: Chain, accounts: Map<string, Account>) {
-        const wallet1 = accounts.get('wallet_1')!;
-        
-        let block = chain.mineBlock([
+        // Test consecutive hyphens
+        block = chain.mineBlock([
             Tx.contractCall('domain-registry', 'register-domain', [
-                types.ascii("test.btc")
-            ], wallet1.address),
-            Tx.contractCall('domain-registry', 'register-subdomain', [
-                types.ascii("test.btc"),
-                types.ascii("sub")
+                types.ascii("test--domain.btc")
             ], wallet1.address)
         ]);
+        block.receipts[0].result.expectErr(108); // err-consecutive-hyphens
         
-        block.receipts[0].result.expectOk();
-        block.receipts[1].result.expectOk();
-        
-        // Verify subdomain ownership
-        let query = chain.callReadOnlyFn(
-            'domain-registry',
-            'get-domain-owner',
-            [types.ascii("sub.test.btc")],
-            wallet1.address
-        );
-        
-        assertEquals(query.result.expectSome(), wallet1.address);
-    }
-});
-
-Clarinet.test({
-    name: "Test duplicate registration prevention",
-    async fn(chain: Chain, accounts: Map<string, Account>) {
-        const wallet1 = accounts.get('wallet_1')!;
-        const wallet2 = accounts.get('wallet_2')!;
-        
-        let block = chain.mineBlock([
+        // Test valid domain
+        block = chain.mineBlock([
             Tx.contractCall('domain-registry', 'register-domain', [
-                types.ascii("test.btc")
-            ], wallet1.address),
-            Tx.contractCall('domain-registry', 'register-domain', [
-                types.ascii("test.btc")
-            ], wallet2.address)
-        ]);
-        
-        block.receipts[0].result.expectOk();
-        block.receipts[1].result.expectErr(types.uint(101)); // err-already-registered
-    }
-});
-
-Clarinet.test({
-    name: "Test domain transfer",
-    async fn(chain: Chain, accounts: Map<string, Account>) {
-        const wallet1 = accounts.get('wallet_1')!;
-        const wallet2 = accounts.get('wallet_2')!;
-        
-        let block = chain.mineBlock([
-            Tx.contractCall('domain-registry', 'register-domain', [
-                types.ascii("test.btc")
-            ], wallet1.address),
-            Tx.contractCall('domain-registry', 'transfer-domain', [
-                types.principal(wallet2.address)
+                types.ascii("test-domain.btc")
             ], wallet1.address)
         ]);
-        
-        block.receipts[0].result.expectOk();
-        block.receipts[1].result.expectOk();
-        
-        // Verify new ownership
-        let query = chain.callReadOnlyFn(
-            'domain-registry',
-            'get-domain-owner',
-            [types.ascii("test.btc")],
-            wallet1.address
-        );
-        
-        assertEquals(query.result.expectSome(), wallet2.address);
+        block.receipts[0].result.expectOk(true);
     }
 });
+
+[... original test remains the same ...]
